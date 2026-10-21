@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze Game</title>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --text-color: #f8fafc;
+      --wall-color: #334155;
+      --player-color: #38bdf8;
+      --goal-color: #4ade80;
+      --accent-color: #6366f1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 15px;
+      font-size: 2.5rem;
+      letter-spacing: 1px;
+    }
+
+    .stats-container {
+      display: flex;
+      margin-bottom: 15px;
+      font-size: 1.1rem;
+      background: var(--card-bg);
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-box span {
+      font-weight: bold;
+      color: var(--player-color);
+    }
+
+    #game-container {
+      position: relative;
+      background-color: var(--card-bg);
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+
+    canvas {
+      border-radius: 6px;
+      display: block;
+    }
+
+    .d-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 50px);
+      grid-template-rows: repeat(2, 50px);
+      gap: 8px;
+      margin-top: 15px;
+      justify-content: center;
+    }
+
+    .d-pad button {
+      background-color: var(--card-bg);
+      border: 2px solid var(--accent-color);
+      color: white;
+      font-size: 1.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      transition: background 0.1s, transform 0.1s;
+    }
+
+    .d-pad button:active {
+      background-color: var(--accent-color);
+      transform: scale(0.95);
+    }
+
+    .btn-up { grid-column: 2; grid-row: 1; }
+    .btn-left { grid-column: 1; grid-row: 2; }
+    .btn-down { grid-column: 2; grid-row: 2; }
+    .btn-right { grid-column: 3; grid-row: 2; }
+
+    .action-controls {
+      margin-top: 15px;
+    }
+
+    .reset-btn {
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1rem;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .reset-btn:hover {
+      background-color: #4f46e5;
+    }
+
+    .reset-btn:active {
+      transform: scale(0.98);
+    }
+
+    .modal {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 12px;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal h2 {
+      font-size: 2rem;
+      color: var(--goal-color);
+      margin-bottom: 10px;
+    }
+
+    .modal p {
+      margin-bottom: 20px;
+      font-size: 1.1rem;
+    }
+
+    footer {
+      margin-top: 25px;
+      font-size: 0.9rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Maze Game</h1>
+
+  <div class="stats-container">
+    <div class="stat-box">Moves: <span id="moves-count">0</span></div>
+  </div>
+
+  <div id="game-container">
+    <canvas id="mazeCanvas"></canvas>
+    <div id="winModal" class="modal">
+      <h2>🎉 You Won!</h2>
+      <p id="win-stats">Completed in 0 moves!</p>
+      <button class="reset-btn" onclick="resetGame()">Play Again</button>
+    </div>
+  </div>
+
+  <div class="d-pad">
+    <button class="btn-up" onclick="movePlayer('Up')">▲</button>
+    <button class="btn-left" onclick="movePlayer('Left')">◄</button>
+    <button class="btn-down" onclick="movePlayer('Down')">▼</button>
+    <button class="btn-right" onclick="movePlayer('Right')">►</button>
+  </div>
+
+  <div class="action-controls">
+    <button class="reset-btn" onclick="resetGame()">New Game</button>
+  </div>
+
+  <footer>
+    2026 | Made by Akshita Kar
+  </footer>
+
+  <script>
+    const canvas = document.getElementById('mazeCanvas');
+    const ctx = canvas.getContext('2d');
+    const movesEl = document.getElementById('moves-count');
+    const winModal = document.getElementById('winModal');
+    const winStats = document.getElementById('win-stats');
+
+    const cols = 15;
+    const rows = 15;
+    const cellSize = 25;
+
+    canvas.width = cols * cellSize;
+    canvas.height = rows * cellSize;
+
+    let grid = [];
+    let currentCell;
+    let stack = [];
+    let player = { x: 0, y: 0 };
+    let goal = { x: cols - 1, y: rows - 1 };
+    
+    let moves = 0;
+    let gameActive = false;
+
+    class Cell {
+      constructor(c, r) {
+        this.c = c;
+        this.r = r;
+        this.walls = [true, true, true, true];
+        this.visited = false;
+      }
+
+      checkNeighbors() {
+        let neighbors = [];
+        let { c, r } = this;
+
+        let top    = grid[index(c, r - 1)];
+        let right  = grid[index(c + 1, r)];
+        let bottom = grid[index(c, r + 1)];
+        let left   = grid[index(c - 1, r)];
+
+        if (top && !top.visited) neighbors.push(top);
+        if (right && !right.visited) neighbors.push(right);
+        if (bottom && !bottom.visited) neighbors.push(bottom);
+        if (left && !left.visited) neighbors.push(left);
+
+        if (neighbors.length > 0) {
+          let r = Math.floor(Math.random() * neighbors.length);
+          return neighbors[r];
+        } else {
+          return undefined;
+        }
+      }
+    }
+
+    function index(c, r) {
+      if (c < 0 || r < 0 || c >= cols || r >= rows) return -1;
+      return c + r * cols;
+    }
+
+    function generateMaze() {
+      grid = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          grid.push(new Cell(c, r));
+        }
+      }
+
+      currentCell = grid[0];
+      currentCell.visited = true;
+      stack = [];
+
+      while (true) {
+        let next = currentCell.checkNeighbors();
+        if (next) {
+          next.visited = true;
+          stack.push(currentCell);
+          removeWalls(currentCell, next);
+          currentCell = next;
+        } else if (stack.length > 0) {
+          currentCell = stack.pop();
+        } else {
+          break;
+        }
+      }
+    }
+
+    function removeWalls(a, b) {
+      let x = a.c - b.c;
+      if (x === 1) { a.walls[3] = false; b.walls[1] = false; }
+      else if (x === -1) { a.walls[1] = false; b.walls[3] = false; }
+
+      let y = a.r - b.r;
+      if (y === 1) { a.walls[0] = false; b.walls[2] = false; }
+      else if (y === -1) { a.walls[2] = false; b.walls[0] = false; }
+    }
+
+    function draw() {
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < grid.length; i++) {
+        let x = grid[i].c * cellSize;
+        let y = grid[i].r * cellSize;
+
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 3;
+
+        if (grid[i].walls[0]) drawLine(x, y, x + cellSize, y);
+        if (grid[i].walls[1]) drawLine(x + cellSize, y, x + cellSize, y + cellSize);
+        if (grid[i].walls[2]) drawLine(x + cellSize, y + cellSize, x, y + cellSize);
+        if (grid[i].walls[3]) drawLine(x, y + cellSize, x, y);
+      }
+
+      ctx.fillStyle = '#4ade80';
+      ctx.beginPath();
+      ctx.arc(
+        goal.x * cellSize + cellSize / 2,
+        goal.y * cellSize + cellSize / 2,
+        cellSize / 3, 0, Math.PI * 2
+      );
+      ctx.fill();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(
+        player.x * cellSize + cellSize / 2,
+        player.y * cellSize + cellSize / 2,
+        cellSize / 3, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    function drawLine(x1, y1, x2, y2) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function movePlayer(dir) {
+      if (!gameActive) return;
+
+      let current = grid[index(player.x, player.y)];
+
+      if (dir === 'Up' && !current.walls[0]) player.y--;
+      else if (dir === 'Right' && !current.walls[1]) player.x++;
+      else if (dir === 'Down' && !current.walls[2]) player.y++;
+      else if (dir === 'Left' && !current.walls[3]) player.x--;
+      else return;
+
+      moves++;
+      movesEl.innerText = moves;
+      draw();
+      checkWin();
+    }
+
+    function checkWin() {
+      if (player.x === goal.x && player.y === goal.y) {
+        gameActive = false;
+        winStats.innerText = `Cleared in ${moves} moves!`;
+        winModal.classList.add('active');
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': movePlayer('Up'); break;
+        case 'ArrowRight': case 'd': case 'D': movePlayer('Right'); break;
+        case 'ArrowDown': case 's': case 'S': movePlayer('Down'); break;
+        case 'ArrowLeft': case 'a': case 'A': movePlayer('Left'); break;
+      }
+    });
+
+    function resetGame() {
+      winModal.classList.remove('active');
+      player = { x: 0, y: 0 };
+      moves = 0;
+      movesEl.innerText = moves;
+
+      generateMaze();
+      draw();
+      gameActive = true;
+    }
+
+    resetGame();
+  </script>
+</body>
+</html>
