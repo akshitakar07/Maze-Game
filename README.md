@@ -47,4 +47,3 @@ To play the Maze Game, open the application in your web browser and navigate thr
 - **Name:** Akshita Kar
 - **GitHub:** github.com/akshitakar07
 - **Email:** akshitakar07@gmail.com
-- 
